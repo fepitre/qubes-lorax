@@ -8,6 +8,7 @@ Release:        @REL@%{?dist}
 Epoch:          1000
 Summary:        Tool for creating the anaconda install images
 
+Group:          Applications/System
 License:        GPLv2+
 URL:            https://github.com/weldr/lorax
 # To generate Source0 do:
@@ -15,14 +16,22 @@ URL:            https://github.com/weldr/lorax
 # git checkout -b archive-branch lorax-%%{version}-%%{release}
 # tito build --tgz
 Source0:        %{name}-%{version}.tar.gz
-Patch0: 0001-Allow-specify-gpg-key-for-a-repository.patch
-Patch1: 0002-verify-packages-signature.patch
-Patch2: 0003-Update-package-verification-for-dnf-API.patch
+
+# Patches for rhbz#1826479
+Patch0001: 0001-lorax-Add-skip-branding-cmdline-argument.patch
+Patch0002: 0002-Move-get_dnf_base_object-into-a-module.patch
+Patch0003: 0003-tests-Add-tests-for-branding.patch
+
+Patch0004: 0001-Allow-specify-gpg-key-for-a-repository.patch
+Patch0005: 0002-verify-packages-signature.patch
+Patch0006: 0003-Update-package-verification-for-dnf-API.patch
 
 BuildRequires:  python3-devel
-BuildRequires:  make
 
 Requires:       lorax-templates
+%if 0%{?rhel} >= 8
+Requires:       lorax-templates-rhel
+%endif
 
 Requires:       GConf2
 Requires:       cpio
@@ -31,7 +40,7 @@ Requires:       dosfstools
 Requires:       e2fsprogs
 Requires:       findutils
 Requires:       gawk
-Requires:       xorriso
+Requires:       genisoimage
 Requires:       glib2
 Requires:       glibc
 Requires:       glibc-common
@@ -41,20 +50,18 @@ Requires:       module-init-tools
 Requires:       parted
 Requires:       squashfs-tools >= 4.2
 Requires:       util-linux
-Requires:       xz-lzma-compat
 Requires:       xz
 Requires:       pigz
-Requires:       pbzip2
 Requires:       dracut >= 030
 Requires:       kpartx
 
 # Python modules
 Requires:       libselinux-python3
 Requires:       python3-mako
-Requires:       python3-kickstart >= 3.19
+Requires:       python3-kickstart >= 3.16.4
 Requires:       python3-dnf >= 3.2.0
 Requires:       python3-librepo
-Requires:       python3-pycdlib
+
 
 %if 0%{?fedora}
 # Fedora specific deps
@@ -64,11 +71,10 @@ Requires:       hfsplus-tools
 %endif
 
 %ifarch %{ix86} x86_64
-Requires:       syslinux >= 6.03-1
-Requires:       syslinux-nonlinux >= 6.03-1
+Requires:       syslinux >= 6.02-4
 %endif
 
-%ifarch ppc64le
+%ifarch ppc ppc64 ppc64le
 Requires:       grub2
 Requires:       grub2-tools
 %endif
@@ -94,7 +100,7 @@ Anaconda's image install feature.
 
 %package docs
 Summary: Lorax html documentation
-Requires: lorax = %{version}-%{release}
+Requires: lorax = %{epoch}:%{version}-%{release}
 
 %description docs
 Includes the full html documentation for lorax, livemedia-creator, lorax-composer and the
@@ -103,16 +109,15 @@ pylorax library.
 %package lmc-virt
 Summary:  livemedia-creator libvirt dependencies
 Requires: lorax = %{epoch}:%{version}-%{release}
-Requires: qemu
+Requires: qemu-kvm
 
 # Fedora edk2 builds currently only support these arches
-%ifarch %{ix86} x86_64 %{arm} aarch64
+%ifarch %{ix86} x86_64
 Requires: edk2-ovmf
 %endif
-Recommends: qemu-kvm
 
 %description lmc-virt
-Additional dependencies required by livemedia-creator when using it with qemu.
+Additional dependencies required by livemedia-creator when using it with qemu-kvm.
 
 %package lmc-novirt
 Summary:  livemedia-creator no-virt dependencies
@@ -137,20 +142,20 @@ Lorax templates for creating the boot.iso and live isos are placed in
 %package composer
 Summary: Lorax Image Composer API Server
 # For Sphinx documentation build
-BuildRequires: python3-flask python3-gobject libgit2-glib python3-toml python3-semantic_version
+BuildRequires: python3-flask python3-gobject libgit2-glib python3-pytoml python3-semantic_version
 
 Requires: lorax = %{epoch}:%{version}-%{release}
 Requires(pre): /usr/bin/getent
 Requires(pre): /usr/sbin/groupadd
 Requires(pre): /usr/sbin/useradd
 
-Requires: python3-toml
+Requires: python3-pytoml
 Requires: python3-semantic_version
 Requires: libgit2
 Requires: libgit2-glib
 Requires: python3-flask
 Requires: python3-gevent
-Requires: anaconda-tui >= 29.19-1
+Requires: anaconda-tui
 Requires: qemu-img
 Requires: tar
 Requires: python3-rpmfluff
@@ -161,9 +166,6 @@ Requires: createrepo_c
 %{?systemd_requires}
 BuildRequires: systemd
 
-# Implements the weldr API
-Provides: weldr
-
 %description composer
 lorax-composer provides a REST API for building images using lorax.
 
@@ -172,26 +174,26 @@ Summary: A command line tool for use with the lorax-composer API server
 
 # From Distribution
 Requires: python3-urllib3
-Requires: python3-toml
+Requires: python3-pytoml
 
 %description -n composer-cli
-A command line tool for use with the lorax-composer API server. Examine blueprints,
+A command line tool for use with the lorax-composer API server. Examine recipes,
 build images, etc. from the command line.
 
 %prep
-%autosetup -p1
+%autosetup -p1 -n %{name}-%{version}
 
 %build
 
 %install
-rm -rf $RPM_BUILD_ROOT
-make DESTDIR=$RPM_BUILD_ROOT mandir=%{_mandir} install
+rm -rf %{buildroot}
+make DESTDIR=%{buildroot} mandir=%{_mandir} install
 
 # Install example blueprints from the test suite.
 # This path MUST match the lorax-composer.service blueprint path.
-mkdir -p $RPM_BUILD_ROOT/var/lib/lorax/composer/blueprints/
+mkdir -p %{buildroot}/var/lib/lorax/composer/blueprints/
 for bp in example-http-server.toml example-development.toml example-atlas.toml; do
-    cp ./tests/pylorax/blueprints/$bp $RPM_BUILD_ROOT/var/lib/lorax/composer/blueprints/
+    cp ./tests/pylorax/blueprints/$bp %{buildroot}/var/lib/lorax/composer/blueprints/
 done
 
 %pre composer
@@ -222,15 +224,12 @@ getent passwd weldr >/dev/null 2>&1 || useradd -r -g weldr -d / -s /sbin/nologin
 %{_sbindir}/lorax
 %{_sbindir}/mkefiboot
 %{_sbindir}/livemedia-creator
-%{_sbindir}/mkksiso
 %{_bindir}/image-minimizer
 %{_bindir}/mk-s390-cdboot
 %dir %{_sysconfdir}/lorax
 %config(noreplace) %{_sysconfdir}/lorax/lorax.conf
 %dir %{_datadir}/lorax
-%{_mandir}/man1/lorax.1*
-%{_mandir}/man1/livemedia-creator.1*
-%{_mandir}/man1/mkksiso.1*
+%{_mandir}/man1/*.1*
 %{_tmpfilesdir}/lorax.conf
 
 %files docs
@@ -247,24 +246,20 @@ getent passwd weldr >/dev/null 2>&1 || useradd -r -g weldr -d / -s /sbin/nologin
 %files composer
 %config(noreplace) %{_sysconfdir}/lorax/composer.conf
 %{python3_sitelib}/pylorax/api/*
-%{python3_sitelib}/lifted/*
 %{_sbindir}/lorax-composer
 %{_unitdir}/lorax-composer.service
 %{_unitdir}/lorax-composer.socket
 %dir %{_datadir}/lorax/composer
 %{_datadir}/lorax/composer/*
-%{_datadir}/lorax/lifted/*
 %{_tmpfilesdir}/lorax-composer.conf
 %dir %attr(0771, root, weldr) %{_sharedstatedir}/lorax/composer/
 %dir %attr(0771, root, weldr) %{_sharedstatedir}/lorax/composer/blueprints/
 %attr(0771, weldr, weldr) %{_sharedstatedir}/lorax/composer/blueprints/*
-%{_mandir}/man1/lorax-composer.1*
 
 %files -n composer-cli
 %{_bindir}/composer-cli
 %{python3_sitelib}/composer/*
 %{_sysconfdir}/bash_completion.d/composer-cli
-%{_mandir}/man1/composer-cli.1*
 
 %changelog
 @CHANGELOG@
