@@ -1,0 +1,28 @@
+From aae0be464dbe538db592540b90fe81c41613cafe Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Fr=C3=A9d=C3=A9ric=20Pierret=20=28fepitre=29?=
+ <frederic.pierret@qubes-os.org>
+Date: Tue, 8 Jun 2021 13:46:11 +0200
+Subject: [PATCH] Allow to pass --add-template-var to runtime-install
+
+---
+ src/pylorax/treebuilder.py | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/src/pylorax/treebuilder.py b/src/pylorax/treebuilder.py
+index 7f951b55..50733a1b 100644
+--- a/src/pylorax/treebuilder.py
++++ b/src/pylorax/treebuilder.py
+@@ -133,7 +133,9 @@ class RuntimeBuilder(object):
+             self._runner.installpkg(*self._installpkgs)
+         if len(self._excludepkgs) > 0:
+             self._runner.removepkg(*self._excludepkgs)
+-        self._runner.run("runtime-install.tmpl")
++
++        self._runner.run("runtime-install.tmpl", **self.add_template_vars)
++
+         for tmpl in self.add_templates:
+             self._runner.run(tmpl, **self.add_template_vars)
+ 
+-- 
+2.31.1
+
